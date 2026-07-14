@@ -3,8 +3,6 @@ import tempfile
 import streamlit as st
 from dotenv import load_dotenv
 from typing import TypedDict
-
-# LangChain Imports
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import ChatOpenAI
@@ -14,14 +12,10 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.documents import Document
-
-# LangGraph Imports
 from langgraph.graph import END, StateGraph
 
-# Load environment variables
 load_dotenv()
 
-# Setup Streamlit Page
 st.set_page_config(page_title="Agentic RAG | Financial Analyst", page_icon="🤖", layout="wide")
 
 st.markdown("""
@@ -29,14 +23,13 @@ st.markdown("""
     .main {background-color: #0E1117;}
     h1 {color: #00E5FF; font-family: 'Inter', sans-serif;}
     .stChatFloatingInputContainer {padding-bottom: 20px;}
-    .css-1d391kg {background-color: #1E2127;} /* Sidebar color */
+    .css-1d391kg {background-color: #1E2127;}
 </style>
 """, unsafe_allow_html=True)
 
 st.title("🤖 Agentic RAG: Smart AI Assistant")
 st.markdown("Upload a PDF document. The Agent will dynamically decide whether to answer from the **PDF** (Vectorstore) or **Search the Web** (Tavily) for the latest information.")
 
-# Check for API Keys
 openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
 tavily_key = os.getenv("TAVILY_API_KEY")
 
@@ -45,25 +38,18 @@ if not openrouter_api_key:
 if not tavily_key or tavily_key == "your_tavily_api_key_here":
     st.warning("⚠️ **TAVILY_API_KEY** is missing. Please add it to your `.env` file.")
 
-# Sidebar for file upload
 with st.sidebar:
     st.header("📄 Upload Document")
     uploaded_file = st.file_uploader("Upload a PDF (e.g., Financial Report)", type=["pdf"])
 
-# Application State for LangGraph
 class GraphState(TypedDict):
-    """
-    Represents the state of our graph.
-    """
     keys: dict
 
-# Initialize Session State
 if "vectorstore" not in st.session_state:
     st.session_state.vectorstore = None
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Process PDF
 if uploaded_file and not st.session_state.vectorstore:
     with st.spinner("Processing PDF and creating embeddings..."):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
@@ -91,12 +77,10 @@ if uploaded_file and not st.session_state.vectorstore:
         except Exception as e:
             st.error(f"Error processing PDF: {e}")
 
-# Display Chat History
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- LangGraph Logic Functions ---
 def retrieve(state):
     st.toast("Agent chose: **Vectorstore Retrieval**", icon="📚")
     state_dict = state["keys"]
@@ -146,11 +130,9 @@ def route_question(state):
     state_dict = state["keys"]
     question = state_dict["question"]
     
-    # If no PDF is uploaded, always route to web search
     if not st.session_state.vectorstore:
         return "web_search"
     
-    # Use LLM to route
     llm = ChatOpenAI(base_url="https://openrouter.ai/api/v1", api_key=openrouter_api_key, model="openai/gpt-4o-mini", temperature=0)
     system_prompt = """You are an expert routing assistant. Your job is to decide whether to route a user's question to a vector database or a web search tool.
     The vector database contains documents uploaded by the user (e.g., Financial Reports, PDFs).
@@ -169,7 +151,6 @@ def route_question(state):
         return "web_search"
     return "vectorstore"
 
-# --- Build LangGraph ---
 app_graph = None
 if openrouter_api_key:
     workflow = StateGraph(GraphState)
@@ -191,7 +172,6 @@ if openrouter_api_key:
     
     app_graph = workflow.compile()
 
-# Chat Input
 if prompt := st.chat_input("Ask a question about the PDF or recent news..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -202,9 +182,8 @@ if prompt := st.chat_input("Ask a question about the PDF or recent news..."):
             with st.spinner("Agent is deciding the best way to answer..."):
                 inputs = {"keys": {"question": prompt}}
                 for output in app_graph.stream(inputs):
-                    pass # Streamlit toasts handle the progress updates
+                    pass
                 
-                # Get the final generation from the last node (generate)
                 final_state = output[list(output.keys())[0]]
                 final_generation = final_state["keys"]["generation"]
                 
